@@ -9,6 +9,17 @@ from .models import Conversation, AgentLog
 from langchain.agents.middleware import wrap_tool_call
 from .event_queue import publish, DONE
 
+def extract_text(content):
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                parts.append(block.get("text", ""))
+        return "".join(parts)
+    return str(content)
+
 # Initialize Anthropic client
 llm = ChatAnthropic(model=settings.ANTHROPIC_MODEL, api_key=settings.ANTHROPIC_API_KEY)
 
@@ -65,7 +76,7 @@ def run_support_agent_langchain(user_message, conversation_id, order_id, user_id
         {"messages": [{"role": "user", "content": contextual_message}]},
         config=config,
     )
-    final_reply = result["messages"][-1].content
+    final_reply = extract_text(result["messages"][-1].content)
 
     event = {"type": "final", "message": final_reply}
     publish(conversation_id, event)
@@ -115,7 +126,7 @@ def run_manager_agent_langchain(case_summary, conversation_id):
         "messages": [{"role": "user", "content": case_summary}]
     })
 
-    decision = result["messages"][-1].content
+    decision = extract_text(result["messages"][-1].content)
     event = {"type": "manager", "message": f"Decision: {decision[:200]}"}
     publish(conversation_id, event)
 
@@ -151,7 +162,7 @@ def run_risk_agent_langchain(user_id, conversation_id):
     result = risk_agent.invoke({
         "messages": [{"role": "user", "content": f"Please assess the fraud risk for user ID {user_id}. User your tool to get their profile and return a verdict."}]
     })
-    verdict = result["messages"][-1].content
+    verdict = extract_text(result["messages"][-1].content)
 
     event = {"type": "risk", "message": f"Verdict: {verdict[:200]}"}
     publish(conversation_id, event)
